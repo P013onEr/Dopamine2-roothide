@@ -37,9 +37,7 @@
 
 - (BOOL)isUpdateAvailable
 {
-    NSString *latestVersion = [self getLatestReleaseTag];
-    NSString *currentVersion = [self getLaunchedReleaseTag];
-    return [latestVersion numericalVersionRepresentation] > [currentVersion numericalVersionRepresentation];
+    return NO;
 }
 
 - (NSArray *)getUpdatesInRange:(NSString *)start end:(NSString *)end
@@ -68,48 +66,17 @@
 
 - (NSArray *)getLatestReleases
 {
-    static dispatch_once_t onceToken;
-    static NSArray *releases;
-    dispatch_once(&onceToken, ^{
-        NSURL *url = [NSURL URLWithString:@"https://api.github.com/repos/roothide/Dopamine2-roothide/releases"];
-        NSData *data = [NSData dataWithContentsOfURL:url];
-        if (data) {
-            NSError *error;
-            releases = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:&error];
-            if (error)
-            {
-                onceToken = 0;
-                releases = @[];
-            }
-        }
-    });
-    return releases;
+    return @[];
 }
 
 - (BOOL)environmentUpdateAvailable
 {
-    if (![[DOEnvironmentManager sharedManager] jailbrokenVersion])
-        return NO;
-
-    NSString *jailbrokenVersion = [[DOEnvironmentManager sharedManager] jailbrokenVersion];
-    NSString *launchedVersion = [self getLaunchedReleaseTag];
-    
-    return [launchedVersion numericalVersionRepresentation] > [jailbrokenVersion numericalVersionRepresentation];
+    return NO;
 }
 
 - (bool)launchedReleaseNeedsManualUpdate
 {
-    NSString *launchedTag = [self getLaunchedReleaseTag];
-    NSDictionary *launchedVersion;
-    for (NSDictionary *release in [self getLatestReleases]) {
-        if ([release[@"tag_name"] isEqualToString:launchedTag]) {
-            launchedVersion = release;
-            break;
-        }
-    }
-    if (!launchedVersion)
-        return false;
-    return [launchedVersion[@"body"] containsString:@"*Manual Updates*"];
+    return false;
 }
 
 - (NSString*)getLatestReleaseTag

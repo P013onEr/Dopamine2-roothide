@@ -119,3 +119,14 @@
 "Status_Title_Select_Package_Managers" = "Select Package Manager(s)";
 "Select_Package_Managers_Install_Message" = "If you are unsure which one to select, select Sileo";
 "Continue" = "Continue";
+
+// Mount management
+"Input_Mmount_Title" = "Add Mount";
+"Input_Unmount_Title" = "Manage Mounts";
+"Input_Mount_Title" = "Enter an absolute directory path";
+"Error_Mount_Body" = "The directory does not exist or the mount failed";
+"Select_Mount_Title" = "Select a mounted path";
+"Button_Delete_Path_Only" = "Forget Path";
+"Button_Delete" = "Unmount";
+"Button_View" = "View in Filza";
+"Button_Mount" = "Mount";

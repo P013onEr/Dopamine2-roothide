@@ -93,6 +93,22 @@ int fakelib_set_mounted(bool mounted)
 }
 */
 
+static NSString *backingPathForMountPath(NSString *mountPath)
+{
+    return [NSString stringWithFormat:@"%@%@", JBROOT_PATH(@"/mnt"), mountPath];
+}
+
+static BOOL prepareBackingPath(NSString *mountPath, NSError **error)
+{
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSString *backingPath = backingPathForMountPath(mountPath);
+    if ([fileManager fileExistsAtPath:backingPath]) return YES;
+
+    NSString *parentPath = [backingPath stringByDeletingLastPathComponent];
+    if (![fileManager createDirectoryAtPath:parentPath withIntermediateDirectories:YES attributes:nil error:error]) return NO;
+    return [fileManager copyItemAtPath:mountPath toPath:backingPath error:error];
+}
+
 int jbctl_handle_internal(const char *command, int argc, char* argv[])
 {
 	if (!strcmp(command, "launchd_stash_port")) {
@@ -208,6 +224,49 @@ if(access(JBROOT_PATH("/.disable_auto_uicache"), F_OK) == 0) {
 			return r;
 		}
 		return -1;
+	}
+	else if (!strcmp(command, "mount")) {
+		if (argc != 2 || argv[1][0] != '/' || !strcmp(argv[1], "/")) return 11;
+		NSString *mountPath = [[NSString stringWithUTF8String:argv[1]] stringByStandardizingPath];
+		BOOL isDirectory = NO;
+		if (![[NSFileManager defaultManager] fileExistsAtPath:mountPath isDirectory:&isDirectory] || !isDirectory) return 12;
+
+		NSError *error = nil;
+		if (!prepareBackingPath(mountPath, &error)) {
+			printf("Failed to prepare backing path: %s\n", error.localizedDescription.UTF8String);
+			return 13;
+		}
+
+		int ret = 14;
+		printf("Getting kernel ucred...\n");
+		uint64_t orgUcred = 0;
+		if (jbclient_root_steal_ucred(0, &orgUcred) == 0) {
+			NSString *backingPath = backingPathForMountPath(mountPath);
+			printf("Applying mount %s...\n", mountPath.fileSystemRepresentation);
+			ret = mount("bindfs", mountPath.fileSystemRepresentation, MNT_RDONLY, (void *)backingPath.fileSystemRepresentation);
+			printf("ret = %d\n", ret);
+			printf("Dropping kernel ucred...\n");
+			jbclient_root_steal_ucred(orgUcred, NULL);
+		}
+		return ret;
+	}
+	else if (!strcmp(command, "unmount")) {
+		if (argc != 2 || argv[1][0] != '/' || !strcmp(argv[1], "/")) return 11;
+		NSString *mountPath = [[NSString stringWithUTF8String:argv[1]] stringByStandardizingPath];
+		int ret = 12;
+		printf("Getting kernel ucred...\n");
+		uint64_t orgUcred = 0;
+		if (jbclient_root_steal_ucred(0, &orgUcred) == 0) {
+			printf("Applying unmount %s\n", mountPath.fileSystemRepresentation);
+			ret = unmount(mountPath.fileSystemRepresentation, MNT_FORCE);
+			printf("ret = %d\n", ret);
+			printf("Dropping kernel ucred...\n");
+			jbclient_root_steal_ucred(orgUcred, NULL);
+		}
+		if (ret == 0) {
+			[[NSFileManager defaultManager] removeItemAtPath:backingPathForMountPath(mountPath) error:nil];
+		}
+		return ret;
 	}
 	return -1;
 }

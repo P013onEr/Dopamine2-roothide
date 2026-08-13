@@ -44,6 +44,7 @@ CFDictionaryRef _CFPreferencesCopyMultipleWithContainer(CFArrayRef keysToFetch, 
 //char *_dirhelper(int a, char *dst, size_t size);
 
 NSString *const JBErrorDomain = @"JBErrorDomain";
+static NSString *const DOMountPathsPlist = @"/var/mobile/newFakePath_RH.plist";
 typedef NS_ENUM(NSInteger, JBErrorCode) {
     JBErrorCodeFailedToFindKernel            = -1,
     JBErrorCodeFailedKernelPatchfinding      = -2,
@@ -646,7 +647,15 @@ setenv("DYLD_IN_CACHE", "0", 1);
 setenv("DISABLE_TWEAKS", "1", 1);
 // using the stock path during jailbreaking
 setenv("DYLD_INSERT_LIBRARIES", JBROOT_PATH("/basebin/systemhook.dylib"), 1);
-
+NSDictionary *mountConfiguration = [NSDictionary dictionaryWithContentsOfFile:DOMountPathsPlist];
+NSArray *mountPaths = mountConfiguration[@"path"];
+if ([mountPaths isKindOfClass:NSArray.class]) {
+    for (id path in mountPaths) {
+        if ([path isKindOfClass:NSString.class] && [path hasPrefix:@"/"] && ![path isEqualToString:@"/"]) {
+            exec_cmd(JBROOT_PATH("/basebin/jbctl"), "internal", "mount", [path fileSystemRepresentation], NULL);
+        }
+    }
+}
 /******************************** roothide specific *************************/
 
     
