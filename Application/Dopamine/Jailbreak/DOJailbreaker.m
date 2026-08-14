@@ -155,8 +155,9 @@ sets[idx] = NULL;
 - (NSError *)doExploitation
 {
     DOExploit *kernelExploit = [DOExploitManager sharedManager].selectedKernelExploit;
-    DOExploit *pacBypass = [DOExploitManager sharedManager].selectedPACBypass;
-    DOExploit *pplBypass = [DOExploitManager sharedManager].selectedPPLBypass;
+    DOExploit *pacBypass     = [DOExploitManager sharedManager].selectedPACBypass;
+    DOExploit *pplBypass     = [DOExploitManager sharedManager].selectedPPLBypass;
+
     if (!kernelExploit) {
         return [NSError errorWithDomain:JBErrorDomain code:JBErrorCodeFailedExploitation userInfo:@{NSLocalizedDescriptionKey:@"Kernel exploit is required but we did not find any"}];
     }

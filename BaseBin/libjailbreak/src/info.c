@@ -163,8 +163,15 @@ void jbinfo_initialize_hardcoded_offsets(void)
 		// inpcb
 		gSystemInfo.kernelStruct.inpcb.list_next = 0x20;
 		gSystemInfo.kernelStruct.inpcb.list_prev = 0x28;
+		gSystemInfo.kernelStruct.inpcb.pcbinfo    = 0x38;
 		gSystemInfo.kernelStruct.inpcb.socket    = 0x40;
 		gSystemInfo.kernelStruct.inpcb.icmp6filt = (0x138 + 0x18);
+
+		// inpcbinfo
+		gSystemInfo.kernelStruct.inpcbinfo.ipi_zone = 0x68;
+
+		// kalloc_type_view
+		gSystemInfo.kernelStruct.kalloc_type_view.kt_zv_zv_name = 0x10;
 
 		// socket
 		gSystemInfo.kernelStruct.socket.proto    = 0x18;

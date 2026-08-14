@@ -21,7 +21,16 @@ uint64_t IOSurfaceClient_get_surface(uint64_t surfaceClient)
 
 uint64_t IOSurfaceSendRight_get_surface(uint64_t surfaceSendRight)
 {
-	return kread_ptr(surfaceSendRight + 0x18);	
+	if (gPrimitives.krwMinSafeReadSize > 0x8) {
+		uint32_t zoneSize = 0x30;
+		uint64_t readOffset = zoneSize - gPrimitives.krwMinSafeReadSize;
+
+		uint8_t buf[gPrimitives.krwMinSafeReadSize];
+		kreadbuf(surfaceSendRight + readOffset, &buf[0], gPrimitives.krwMinSafeReadSize);
+		return UNSIGN_PTR(*(uint64_t *)(&buf[0x18 - readOffset]));
+	} else {
+		return kread_ptr(surfaceSendRight + 0x18);
+	}
 }
 
 uint64_t IOSurface_get_ranges(uint64_t surface)
@@ -44,12 +53,10 @@ uint64_t IOMemoryDescriptor_get_ranges(uint64_t memoryDescriptor)
 	return kread_ptr(memoryDescriptor + 0x60);
 }
 
-
 uint64_t IOMemoryDescriptor_set_ranges(uint64_t memoryDescriptor, uint64_t ranges)
 {
 	return kwrite64(memoryDescriptor + 0x60, ranges);
 }
-
 
 uint64_t IOMemorydescriptor_get_size(uint64_t memoryDescriptor)
 {
@@ -91,13 +98,42 @@ void IOSurface_set_rangeCount(uint64_t surface, uint32_t rangeCount)
 	kwrite32(surface + 0x3e8, rangeCount);
 }
 
-static mach_port_t IOSurface_map_getSurfacePort(uint64_t magic)
+uint64_t IOSurface_port_getSendRight(mach_port_t surfaceMachPort)
 {
-	IOSurfaceRef surfaceRef = IOSurfaceCreate((__bridge CFDictionaryRef)@{
-		(__bridge NSString *)kIOSurfaceWidth : @120,
-		(__bridge NSString *)kIOSurfaceHeight : @120,
-		(__bridge NSString *)kIOSurfaceBytesPerElement : @4,
-	});
+	uint64_t surfaceSendRight = task_get_ipc_port_kobject(task_self(), surfaceMachPort);
+	if (koffsetof(IOMachPort, object)) {
+		if (gPrimitives.krwMinSafeReadSize > 0x8) {
+			uint32_t zoneSize = koffsetof(IOMachPort, object) + 0x8; // object is the last field in IOMachPort
+			uint64_t readOffset = zoneSize - gPrimitives.krwMinSafeReadSize;
+
+			uint8_t buf[gPrimitives.krwMinSafeReadSize];
+			kreadbuf(surfaceSendRight + readOffset, &buf[0], gPrimitives.krwMinSafeReadSize);
+			surfaceSendRight = UNSIGN_PTR(*(uint64_t *)(&buf[gPrimitives.krwMinSafeReadSize - 0x8]));
+		} else {
+			surfaceSendRight = kread_ptr(surfaceSendRight + koffsetof(IOMachPort, object));
+		}
+	}
+	return surfaceSendRight;
+}
+
+static mach_port_t IOSurface_map_getSurfacePort(uint64_t magic, uint32_t cacheMode)
+{
+	IOSurfaceRef surfaceRef = NULL;
+	if (cacheMode != 0) {
+		surfaceRef = IOSurfaceCreate((__bridge CFDictionaryRef)@{
+			(__bridge NSString *)kIOSurfaceWidth : @120,
+			(__bridge NSString *)kIOSurfaceHeight : @120,
+			(__bridge NSString *)kIOSurfaceBytesPerElement : @4,
+			(__bridge NSString *)kIOSurfaceCacheMode : @(cacheMode),
+		});
+	} else {
+		surfaceRef = IOSurfaceCreate((__bridge CFDictionaryRef)@{
+			(__bridge NSString *)kIOSurfaceWidth : @120,
+			(__bridge NSString *)kIOSurfaceHeight : @120,
+			(__bridge NSString *)kIOSurfaceBytesPerElement : @4,
+		});
+	}
+
 	mach_port_t port = IOSurfaceCreateMachPort(surfaceRef);
 	*((uint64_t *)IOSurfaceGetBaseAddress(surfaceRef)) = magic;
 	IOSurfaceDecrementUseCount(surfaceRef);
@@ -114,11 +150,11 @@ struct IOSurface_toCleanup {
 struct IOSurface_toCleanup *cleanups = NULL;
 unsigned cleanupsCount = 0;
 
-int IOSurface_map(uint64_t pa, uint64_t size, void **uaddr)
+int IOSurface_map_withCacheMode(uint64_t pa, uint64_t size, void **uaddr, uint32_t cacheMode)
 {
-	mach_port_t surfaceMachPort = IOSurface_map_getSurfacePort(1337);
+	mach_port_t surfaceMachPort = IOSurface_map_getSurfacePort(1337, cacheMode);
 
-	uint64_t surfaceSendRight = task_get_ipc_port_kobject(task_self(), surfaceMachPort);
+	uint64_t surfaceSendRight = IOSurface_port_getSendRight(surfaceMachPort);
 	uint64_t surface = IOSurfaceSendRight_get_surface(surfaceSendRight);
 	uint64_t desc = IOSurface_get_memoryDescriptor(surface);
 	uint64_t ranges = IOMemoryDescriptor_get_ranges(desc);
@@ -166,6 +202,10 @@ int IOSurface_map(uint64_t pa, uint64_t size, void **uaddr)
 	return 0;
 }
 
+int IOSurface_map(uint64_t pa, uint64_t size, void **uaddr) {
+	return IOSurface_map_withCacheMode(pa, size, uaddr, 0);
+}
+
 void IOSurface_map_cleanup(void)
 {
 	if (gPrimitives.krwMinSafeReadSize > 0x10) return;
@@ -209,7 +249,7 @@ uint64_t IOSurface_kalloc(uint64_t size, bool leak)
 		uint64_t allocSize = max(size, 0x10000);
 		mach_port_t surfaceMachPort = IOSurface_kalloc_getSurfacePort(allocSize);
 
-		uint64_t surfaceSendRight = task_get_ipc_port_kobject(task_self(), surfaceMachPort);
+		uint64_t surfaceSendRight = IOSurface_port_getSendRight(surfaceMachPort);
 		uint64_t surface = IOSurfaceSendRight_get_surface(surfaceSendRight);
 		uint64_t va = IOSurface_get_ranges(surface);
 
